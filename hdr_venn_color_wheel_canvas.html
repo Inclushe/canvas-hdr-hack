@@ -143,28 +143,35 @@
   </label>
 </div>
 
+<div class="toggle-row">
+  <label>
+    <input type="checkbox" id="toggle-peak">
+    Use older lowpeak videos (400 nit peak, MaxCLL/MaxFALL 200/80) instead of newer (200 nit peak, MaxCLL/MaxFALL 100/40)
+  </label>
+</div>
+
 <div class="layout-row">
   <div class="venn" id="venn">
     <div class="circle circle-red">
-      <video autoplay loop muted preload playsinline poster="videos/red.png" title="HDR red video">
-        <source src="videos/red1.webm" type="video/webm">
-        <source src="videos/red1.mp4" type="video/mp4">
+      <video id="video-red" autoplay loop muted preload playsinline poster="videos/red.png" title="HDR red video">
+        <!-- <source src="videos/red1.webm" type="video/webm"> -->
+        <source id="source-red" src="videos/red1_lowpeak2.mp4" type="video/mp4">
       </video>
       <canvas id="canvas-red"></canvas>
       <div class="overlay" id="overlay-red"></div>
     </div>
     <div class="circle circle-green">
-      <video autoplay loop muted preload playsinline poster="videos/green.png" title="HDR green video">
-        <source src="videos/green1.webm" type="video/webm">
-        <source src="videos/green1.mp4" type="video/mp4">
+      <video id="video-green" autoplay loop muted preload playsinline poster="videos/green.png" title="HDR green video">
+        <!-- <source src="videos/green1.webm" type="video/webm"> -->
+        <source id="source-green" src="videos/green1_lowpeak2.mp4" type="video/mp4">
       </video>
       <canvas id="canvas-green"></canvas>
       <div class="overlay" id="overlay-green"></div>
     </div>
     <div class="circle circle-blue">
-      <video autoplay loop muted preload playsinline poster="videos/blue.png" title="HDR blue video">
-        <source src="videos/blue1.webm" type="video/webm">
-        <source src="videos/blue1.mp4" type="video/mp4">
+      <video id="video-blue" autoplay loop muted preload playsinline poster="videos/blue.png" title="HDR blue video">
+        <!-- <source src="videos/blue1.webm" type="video/webm"> -->
+        <source id="source-blue" src="videos/blue1_lowpeak2.mp4" type="video/mp4">
       </video>
       <canvas id="canvas-blue"></canvas>
       <div class="overlay" id="overlay-blue"></div>
@@ -201,6 +208,27 @@
   var toggle = document.getElementById('toggle-venn');
   toggle.addEventListener('change', function() {
     venn.classList.toggle('venn-mode', toggle.checked);
+  });
+
+  var videoSets = {
+    red: { older: 'videos/red1_lowpeak.mp4', newer: 'videos/red1_lowpeak2.mp4' },
+    green: { older: 'videos/green1_lowpeak.mp4', newer: 'videos/green1_lowpeak2.mp4' },
+    blue: { older: 'videos/blue1_lowpeak.mp4', newer: 'videos/blue1_lowpeak2.mp4' }
+  };
+  var togglePeak = document.getElementById('toggle-peak');
+
+  function setPeakSet(useOlder) {
+    ['red', 'green', 'blue'].forEach(function(name) {
+      var video = document.getElementById('video-' + name);
+      var source = document.getElementById('source-' + name);
+      source.src = useOlder ? videoSets[name].older : videoSets[name].newer;
+      video.load();
+      video.play().catch(function() {});
+    });
+  }
+
+  togglePeak.addEventListener('change', function() {
+    setPeakSet(togglePeak.checked);
   });
 
   function coverRect(imgW, imgH, targetW, targetH) {
