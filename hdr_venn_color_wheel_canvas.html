@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HDR Venn color wheel with alpha control</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #fff;
+    font-family: sans-serif;
+    color: #111;
+  }
+  p {
+    max-width: 900px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .venn {
+    position: relative;
+    width: 480px;
+    height: 420px;
+    background: #000;
+    isolation: isolate;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .circle {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    overflow: hidden;
+    top: 80px;
+    left: 110px;
+  }
+  .circle video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .circle canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .circle .overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background: color(display-p3 0 0 0 / 0);
+  }
+  .circle-green {
+    mix-blend-mode: screen;
+  }
+  .circle-blue {
+    mix-blend-mode: screen;
+  }
+  .venn.venn-mode .circle-red {
+    top: 20px;
+    left: 110px;
+  }
+  .venn.venn-mode .circle-green {
+    top: 150px;
+    left: 20px;
+  }
+  .venn.venn-mode .circle-blue {
+    top: 150px;
+    left: 200px;
+  }
+  .toggle-row {
+    max-width: 480px;
+    margin-bottom: 24px;
+  }
+  .layout-row {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  .upload-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .upload-col span {
+    font-size: 13px;
+    color: #555;
+  }
+  .upload-box {
+    width: 260px;
+    height: 260px;
+    background: #000;
+    overflow: hidden;
+  }
+  .upload-box canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .controls {
+    display: flex;
+    gap: 24px;
+    max-width: 480px;
+    margin-bottom: 32px;
+  }
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+  .control span {
+    font-size: 13px;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+<p>
+  Venn diagram color wheel: three overlapping HDR video circles (red, green, blue) on a
+  black backdrop. Each circle stacks a video layer, a canvas layer, and a display-p3
+  overlay div, in that order. The canvas's alpha is driven per-pixel by an uploaded
+  image's color channel (see below). The overlay div's alpha is a plain uniform black,
+  controlled by its own slider, so you can dim an individual circle by fading it toward
+  opaque black without changing the others. Green and blue circles use
+  <code>mix-blend-mode: screen</code> so their light adds where they overlap red and
+  each other, forming yellow, magenta, cyan, and white at the center, the same way
+  overlapping stage lights mix.
+</p>
+
+<div class="toggle-row">
+  <label>
+    <input type="checkbox" id="toggle-venn">
+    Venn diagram layout (unchecked = stacked)
+  </label>
+</div>
+
+<div class="layout-row">
+  <div class="venn" id="venn">
+    <div class="circle circle-red">
+      <video autoplay loop muted preload playsinline poster="videos/red.png" title="HDR red video">
+        <source src="videos/red1.webm" type="video/webm">
+        <source src="videos/red1.mp4" type="video/mp4">
+      </video>
+      <canvas id="canvas-red"></canvas>
+      <div class="overlay" id="overlay-red"></div>
+    </div>
+    <div class="circle circle-green">
+      <video autoplay loop muted preload playsinline poster="videos/green.png" title="HDR green video">
+        <source src="videos/green1.webm" type="video/webm">
+        <source src="videos/green1.mp4" type="video/mp4">
+      </video>
+      <canvas id="canvas-green"></canvas>
+      <div class="overlay" id="overlay-green"></div>
+    </div>
+    <div class="circle circle-blue">
+      <video autoplay loop muted preload playsinline poster="videos/blue.png" title="HDR blue video">
+        <source src="videos/blue1.webm" type="video/webm">
+        <source src="videos/blue1.mp4" type="video/mp4">
+      </video>
+      <canvas id="canvas-blue"></canvas>
+      <div class="overlay" id="overlay-blue"></div>
+    </div>
+  </div>
+
+  <div class="upload-col">
+    <span>upload an image</span>
+    <input type="file" id="upload-input" accept="image/*">
+    <div class="upload-box">
+      <canvas id="canvas-upload"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="control">
+    <span>red overlay alpha</span>
+    <input type="range" id="slider-red" min="0" max="1" step="0.01" value="0">
+  </div>
+  <div class="control">
+    <span>green overlay alpha</span>
+    <input type="range" id="slider-green" min="0" max="1" step="0.01" value="0">
+  </div>
+  <div class="control">
+    <span>blue overlay alpha</span>
+    <input type="range" id="slider-blue" min="0" max="1" step="0.01" value="0">
+  </div>
+</div>
+
+<script>
+(function() {
+  var venn = document.getElementById('venn');
+  var toggle = document.getElementById('toggle-venn');
+  toggle.addEventListener('change', function() {
+    venn.classList.toggle('venn-mode', toggle.checked);
+  });
+
+  function coverRect(imgW, imgH, targetW, targetH) {
+    var targetRatio = targetW / targetH;
+    var imgRatio = imgW / imgH;
+    var sx, sy, sw, sh;
+    if (imgRatio > targetRatio) {
+      sh = imgH;
+      sw = sh * targetRatio;
+      sx = (imgW - sw) / 2;
+      sy = 0;
+    } else {
+      sw = imgW;
+      sh = sw / targetRatio;
+      sx = 0;
+      sy = (imgH - sh) / 2;
+    }
+    return { sx: sx, sy: sy, sw: sw, sh: sh };
+  }
+
+  var names = ['red', 'green', 'blue'];
+  var channelIndex = { red: 0, green: 1, blue: 2 };
+  var channels = {};
+  var uploadedImage = null;
+
+  names.forEach(function(name) {
+    var canvas = document.getElementById('canvas-' + name);
+    var slider = document.getElementById('slider-' + name);
+    var overlay = document.getElementById('overlay-' + name);
+    var ctx = canvas.getContext('2d');
+    channels[name] = { canvas: canvas, ctx: ctx, slider: slider, overlay: overlay };
+
+    function resize() {
+      var rect = canvas.parentElement.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+    }
+
+    slider.addEventListener('input', function() {
+      updateOverlay(name);
+    });
+    window.addEventListener('resize', function() {
+      resize();
+      if (uploadedImage) splitImageToChannels();
+    });
+    resize();
+    updateOverlay(name);
+  });
+
+  function updateOverlay(name) {
+    var entry = channels[name];
+    var alpha = parseFloat(entry.slider.value);
+    entry.overlay.style.backgroundColor = 'color(display-p3 0 0 0 / ' + alpha + ')';
+  }
+
+  function splitImageToChannels() {
+    var refCanvas = channels.red.canvas;
+    var w = refCanvas.width;
+    var h = refCanvas.height;
+    if (w === 0 || h === 0) return;
+
+    var sample = document.createElement('canvas');
+    sample.width = w;
+    sample.height = h;
+    var sampleCtx = sample.getContext('2d');
+    var rect = coverRect(uploadedImage.width, uploadedImage.height, w, h);
+    sampleCtx.drawImage(uploadedImage, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, w, h);
+    var sourceData = sampleCtx.getImageData(0, 0, w, h).data;
+
+    names.forEach(function(name) {
+      var entry = channels[name];
+      var ch = channelIndex[name];
+      var buffer = new Uint8ClampedArray(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        var srcOffset = i * 4;
+        var dstOffset = i * 4;
+        buffer[dstOffset] = 0;
+        buffer[dstOffset + 1] = 0;
+        buffer[dstOffset + 2] = 0;
+        buffer[dstOffset + 3] = 255 - sourceData[srcOffset + ch];
+      }
+      var imageData = new ImageData(buffer, w, h);
+      entry.canvas.width = w;
+      entry.canvas.height = h;
+      entry.ctx.putImageData(imageData, 0, 0);
+    });
+  }
+
+  var uploadInput = document.getElementById('upload-input');
+  var uploadCanvas = document.getElementById('canvas-upload');
+  var uploadCtx = uploadCanvas.getContext('2d');
+
+  function resizeUploadCanvas() {
+    var rect = uploadCanvas.parentElement.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    uploadCanvas.width = Math.round(rect.width * dpr);
+    uploadCanvas.height = Math.round(rect.height * dpr);
+    drawUploadedImage();
+  }
+
+  function drawUploadedImage() {
+    var w = uploadCanvas.width;
+    var h = uploadCanvas.height;
+    uploadCtx.clearRect(0, 0, w, h);
+    if (!uploadedImage) return;
+    var rect = coverRect(uploadedImage.width, uploadedImage.height, w, h);
+    uploadCtx.drawImage(uploadedImage, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, w, h);
+  }
+
+  uploadInput.addEventListener('change', function() {
+    var file = uploadInput.files[0];
+    if (!file) return;
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function() {
+      uploadedImage = img;
+      drawUploadedImage();
+      splitImageToChannels();
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+
+  window.addEventListener('resize', resizeUploadCanvas);
+  resizeUploadCanvas();
+})();
+</script>
+</body>
+</html>

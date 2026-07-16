@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HDR video with draggable transparent window</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  video {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    z-index: 0;
+  }
+  canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    z-index: 1;
+    touch-action: none;
+  }
+</style>
+</head>
+<body>
+<video id="hdr-video" autoplay loop muted preload playsinline poster="videos/white.png" title="HDR Video">
+  <source src="videos/white1.webm" type="video/webm">
+  <source src="videos/white1.mp4" type="video/mp4">
+  <source src="videos/white2.mp4" type="video/mp4">
+  Turn on JavaScript to see the video.
+</video>
+<canvas id="mask-canvas"></canvas>
+<script>
+(function() {
+  var canvas = document.getElementById('mask-canvas');
+  var ctx = canvas.getContext('2d');
+
+  var outerMargin = 32;
+  var innerMargin = 10;
+  var minSize = 32;
+
+  var winRect = null;
+
+  function viewportSize() {
+    return { w: window.innerWidth, h: window.innerHeight };
+  }
+
+  function defaultRect() {
+    var vp = viewportSize();
+    var size = 32;
+    return {
+      x: (vp.w - size) / 2,
+      y: (vp.h - size) / 2,
+      w: size,
+      h: size
+    };
+  }
+
+  function clampRect(rect, handle, start) {
+    var vp = viewportSize();
+    var x = rect.x, y = rect.y, w = rect.w, h = rect.h;
+
+    if (w < minSize) {
+      if (handle && handle.indexOf('w') !== -1) {
+        x = (start.x + start.w) - minSize;
+      }
+      w = minSize;
+    }
+    if (h < minSize) {
+      if (handle && handle.indexOf('n') !== -1) {
+        y = (start.y + start.h) - minSize;
+      }
+      h = minSize;
+    }
+
+    if (w > vp.w) w = vp.w;
+    if (h > vp.h) h = vp.h;
+
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x + w > vp.w) x = vp.w - w;
+    if (y + h > vp.h) y = vp.h - h;
+
+    return { x: x, y: y, w: w, h: h };
+  }
+
+  function resizeCanvas() {
+    var vp = viewportSize();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(vp.w * dpr);
+    canvas.height = Math.round(vp.h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!winRect) {
+      winRect = defaultRect();
+    } else {
+      winRect = clampRect(winRect, null, winRect);
+    }
+    draw();
+  }
+
+  function draw() {
+    var vp = viewportSize();
+    ctx.clearRect(0, 0, vp.w, vp.h);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, vp.w, vp.h);
+    ctx.clearRect(winRect.x, winRect.y, winRect.w, winRect.h);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 60, 60);
+  }
+
+  function hitTest(px, py) {
+    var left = winRect.x, right = winRect.x + winRect.w;
+    var top = winRect.y, bottom = winRect.y + winRect.h;
+
+    var moveLeft = left + innerMargin;
+    var moveRight = right - innerMargin;
+    var moveTop = top + innerMargin;
+    var moveBottom = bottom - innerMargin;
+
+    if (moveRight > moveLeft && moveBottom > moveTop &&
+        px > moveLeft && px < moveRight && py > moveTop && py < moveBottom) {
+      return 'move';
+    }
+
+    var nearLeft = px >= left - outerMargin && px <= left + innerMargin && py >= top - outerMargin && py <= bottom + outerMargin;
+    var nearRight = px <= right + outerMargin && px >= right - innerMargin && py >= top - outerMargin && py <= bottom + outerMargin;
+    var nearTop = py >= top - outerMargin && py <= top + innerMargin && px >= left - outerMargin && px <= right + outerMargin;
+    var nearBottom = py <= bottom + outerMargin && py >= bottom - innerMargin && px >= left - outerMargin && px <= right + outerMargin;
+
+    if (nearLeft && nearTop) return 'nw';
+    if (nearRight && nearTop) return 'ne';
+    if (nearLeft && nearBottom) return 'sw';
+    if (nearRight && nearBottom) return 'se';
+    if (nearLeft) return 'w';
+    if (nearRight) return 'e';
+    if (nearTop) return 'n';
+    if (nearBottom) return 's';
+
+    if (px > left && px < right && py > top && py < bottom) return 'move';
+    return null;
+  }
+
+  var cursors = {
+    move: 'move',
+    n: 'ns-resize',
+    s: 'ns-resize',
+    e: 'ew-resize',
+    w: 'ew-resize',
+    ne: 'nesw-resize',
+    sw: 'nesw-resize',
+    nw: 'nwse-resize',
+    se: 'nwse-resize'
+  };
+
+  function applyDrag(handle, dx, dy, start) {
+    var rect = { x: start.x, y: start.y, w: start.w, h: start.h };
+    if (handle === 'move') {
+      rect.x = start.x + dx;
+      rect.y = start.y + dy;
+      return rect;
+    }
+    if (handle.indexOf('e') !== -1) {
+      rect.w = start.w + dx;
+    }
+    if (handle.indexOf('w') !== -1) {
+      rect.x = start.x + dx;
+      rect.w = start.w - dx;
+    }
+    if (handle.indexOf('s') !== -1) {
+      rect.h = start.h + dy;
+    }
+    if (handle.indexOf('n') !== -1) {
+      rect.y = start.y + dy;
+      rect.h = start.h - dy;
+    }
+    return rect;
+  }
+
+  var drag = null;
+
+  canvas.addEventListener('pointerdown', function(e) {
+    var handle = hitTest(e.clientX, e.clientY);
+    if (!handle) {
+      handle = 'move';
+    }
+    drag = {
+      handle: handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      startRect: { x: winRect.x, y: winRect.y, w: winRect.w, h: winRect.h }
+    };
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  canvas.addEventListener('pointermove', function(e) {
+    if (!drag) {
+      var handle = hitTest(e.clientX, e.clientY);
+      canvas.style.cursor = handle ? cursors[handle] : 'default';
+      return;
+    }
+    var dx = e.clientX - drag.startX;
+    var dy = e.clientY - drag.startY;
+    var rect = applyDrag(drag.handle, dx, dy, drag.startRect);
+    winRect = clampRect(rect, drag.handle, drag.startRect);
+    draw();
+    e.preventDefault();
+  });
+
+  function endDrag(e) {
+    if (!drag) return;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    drag = null;
+  }
+
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+})();
+</script>
+</body>
+</html>

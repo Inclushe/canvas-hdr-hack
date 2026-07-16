@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HDR color comparison</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #fff;
+    font-family: sans-serif;
+    color: #111;
+  }
+  p {
+    max-width: 900px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .venn {
+    position: relative;
+    width: 480px;
+    height: 420px;
+    background: #000;
+    isolation: isolate;
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+  .venn video {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .venn .circle-red {
+    top: 20px;
+    left: 110px;
+  }
+  .venn .circle-green {
+    top: 150px;
+    left: 20px;
+    mix-blend-mode: screen;
+  }
+  .venn .circle-blue {
+    top: 150px;
+    left: 200px;
+    mix-blend-mode: screen;
+  }
+  .row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .cell span {
+    font-size: 13px;
+    color: #555;
+  }
+  .swatch {
+    width: 280px;
+    height: 160px;
+    border: 1px solid #ccc;
+    overflow: hidden;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+  }
+  .flat {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+<p>
+  Each row compares the same hue three ways: an HDR-tagged video (BT.2020 primaries,
+  PQ transfer, 10-bit), a plain SDR sRGB CSS color, and a display-p3 CSS color.
+  On an HDR-capable display/browser the video swatch should look more saturated and
+  brighter than the other two. On a non-HDR setup all three should look basically the same
+  (display-p3 slightly more saturated than sRGB on wide-gamut screens).
+</p>
+
+<p>
+  Venn diagram color wheel: three overlapping HDR video circles (red, green, blue) on a
+  black backdrop. Green and blue use <code>mix-blend-mode: screen</code> so their light
+  adds where they overlap red and each other, forming yellow, magenta, cyan, and white
+  at the center, the same way overlapping stage lights mix.
+</p>
+<div class="venn">
+  <video class="circle-red" autoplay loop muted preload playsinline poster="videos/red.png" title="HDR red video">
+    <source src="videos/red1.webm" type="video/webm">
+    <source src="videos/red1.mp4" type="video/mp4">
+  </video>
+  <video class="circle-green" autoplay loop muted preload playsinline poster="videos/green.png" title="HDR green video">
+    <source src="videos/green1.webm" type="video/webm">
+    <source src="videos/green1.mp4" type="video/mp4">
+  </video>
+  <video class="circle-blue" autoplay loop muted preload playsinline poster="videos/blue.png" title="HDR blue video">
+    <source src="videos/blue1.webm" type="video/webm">
+    <source src="videos/blue1.mp4" type="video/mp4">
+  </video>
+</div>
+
+<div class="row">
+  <div class="cell">
+    <span>red - HDR video</span>
+    <div class="swatch">
+      <video autoplay loop muted preload playsinline poster="videos/red.png" title="HDR red video">
+        <source src="videos/red1.webm" type="video/webm">
+        <source src="videos/red1.mp4" type="video/mp4">
+        Turn on JavaScript to see the video.
+      </video>
+    </div>
+  </div>
+  <div class="cell">
+    <span>red - sRGB rgb(255,0,0)</span>
+    <div class="swatch"><div class="flat" style="background: rgb(255,0,0);"></div></div>
+  </div>
+  <div class="cell">
+    <span>red - display-p3 color(display-p3 1 0 0)</span>
+    <div class="swatch"><div class="flat" style="background: color(display-p3 1 0 0);"></div></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="cell">
+    <span>green - HDR video</span>
+    <div class="swatch">
+      <video autoplay loop muted preload playsinline poster="videos/green.png" title="HDR green video">
+        <source src="videos/green1.webm" type="video/webm">
+        <source src="videos/green1.mp4" type="video/mp4">
+        Turn on JavaScript to see the video.
+      </video>
+    </div>
+  </div>
+  <div class="cell">
+    <span>green - sRGB rgb(0,255,0)</span>
+    <div class="swatch"><div class="flat" style="background: rgb(0,255,0);"></div></div>
+  </div>
+  <div class="cell">
+    <span>green - display-p3 color(display-p3 0 1 0)</span>
+    <div class="swatch"><div class="flat" style="background: color(display-p3 0 1 0);"></div></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="cell">
+    <span>blue - HDR video</span>
+    <div class="swatch">
+      <video autoplay loop muted preload playsinline poster="videos/blue.png" title="HDR blue video">
+        <source src="videos/blue1.webm" type="video/webm">
+        <source src="videos/blue1.mp4" type="video/mp4">
+        Turn on JavaScript to see the video.
+      </video>
+    </div>
+  </div>
+  <div class="cell">
+    <span>blue - sRGB rgb(0,0,255)</span>
+    <div class="swatch"><div class="flat" style="background: rgb(0,0,255);"></div></div>
+  </div>
+  <div class="cell">
+    <span>blue - display-p3 color(display-p3 0 0 1)</span>
+    <div class="swatch"><div class="flat" style="background: color(display-p3 0 0 1);"></div></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="cell">
+    <span>white - HDR video</span>
+    <div class="swatch">
+      <video autoplay loop muted preload playsinline poster="videos/white.png" title="HDR white video">
+        <source src="videos/white1.webm" type="video/webm">
+        <source src="videos/white1.mp4" type="video/mp4">
+        <source src="videos/white2.mp4" type="video/mp4">
+        Turn on JavaScript to see the video.
+      </video>
+    </div>
+  </div>
+  <div class="cell">
+    <span>white - sRGB rgb(255,255,255)</span>
+    <div class="swatch"><div class="flat" style="background: rgb(255,255,255);"></div></div>
+  </div>
+  <div class="cell">
+    <span>white - display-p3 color(display-p3 1 1 1)</span>
+    <div class="swatch"><div class="flat" style="background: color(display-p3 1 1 1);"></div></div>
+  </div>
+</div>
+
+</body>
+</html>
