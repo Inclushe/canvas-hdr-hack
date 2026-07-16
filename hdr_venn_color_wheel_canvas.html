@@ -150,6 +150,18 @@
   </label>
 </div>
 
+<div class="toggle-row">
+  <label>
+    Fill brightness candidate (200 nit peak tier only):
+    <select id="select-pq">
+      <option value="full">Full fill (255) - current default</option>
+      <option value="200">~200 nit fill (code ~147)</option>
+      <option value="150">~150 nit fill (code ~140)</option>
+      <option value="100">~100 nit fill (code ~128)</option>
+    </select>
+  </label>
+</div>
+
 <div class="layout-row">
   <div class="venn" id="venn">
     <div class="circle circle-red">
@@ -204,6 +216,32 @@
 
 <script>
 (function() {
+  var isSafari = "GestureEvent" in window;
+
+  var browserDefaultFiles = {
+    red: 'videos/red1_lowpeak.mp4',
+    green: 'videos/green1_lowpeak.mp4',
+    blue: 'videos/blue1_lowpeak.mp4'
+  };
+
+  ['red', 'green', 'blue'].forEach(function(name) {
+    var video = document.getElementById('video-' + name);
+    var source = document.getElementById('source-' + name);
+    source.src = browserDefaultFiles[name];
+    video.load();
+    video.play().catch(function() {});
+  });
+
+  if (isSafari) {
+    document.getElementById('slider-red').value = 0.37;
+    document.getElementById('slider-green').value = 0.08;
+    document.getElementById('slider-blue').value = 0.32;
+  } else {
+    document.getElementById('slider-red').value = 0.7;
+    document.getElementById('slider-green').value = 0.43;
+    document.getElementById('slider-blue').value = 0.58;
+  }
+
   var venn = document.getElementById('venn');
   var toggle = document.getElementById('toggle-venn');
   toggle.addEventListener('change', function() {
@@ -211,24 +249,43 @@
   });
 
   var videoSets = {
-    red: { older: 'videos/red1_lowpeak.mp4', newer: 'videos/red1_lowpeak2.mp4' },
-    green: { older: 'videos/green1_lowpeak.mp4', newer: 'videos/green1_lowpeak2.mp4' },
-    blue: { older: 'videos/blue1_lowpeak.mp4', newer: 'videos/blue1_lowpeak2.mp4' }
+    red: { older: 'videos/red1_lowpeak.mp4' },
+    green: { older: 'videos/green1_lowpeak.mp4' },
+    blue: { older: 'videos/blue1_lowpeak.mp4' }
+  };
+  var pqFiles = {
+    full: { red: 'videos/red1_lowpeak2.mp4', green: 'videos/green1_lowpeak2.mp4', blue: 'videos/blue1_lowpeak2.mp4' },
+    '200': { red: 'videos/red1_pq200.mp4', green: 'videos/green1_pq200.mp4', blue: 'videos/blue1_pq200.mp4' },
+    '150': { red: 'videos/red1_pq150.mp4', green: 'videos/green1_pq150.mp4', blue: 'videos/blue1_pq150.mp4' },
+    '100': { red: 'videos/red1_pq100.mp4', green: 'videos/green1_pq100.mp4', blue: 'videos/blue1_pq100.mp4' }
   };
   var togglePeak = document.getElementById('toggle-peak');
+  var selectPq = document.getElementById('select-pq');
+  togglePeak.checked = true;
+  selectPq.disabled = true;
 
-  function setPeakSet(useOlder) {
+  function updateVideoSources() {
+    var useOlder = togglePeak.checked;
+    var pqLevel = selectPq.value;
     ['red', 'green', 'blue'].forEach(function(name) {
       var video = document.getElementById('video-' + name);
       var source = document.getElementById('source-' + name);
-      source.src = useOlder ? videoSets[name].older : videoSets[name].newer;
+      source.src = useOlder ? videoSets[name].older : pqFiles[pqLevel][name];
       video.load();
       video.play().catch(function() {});
     });
   }
 
   togglePeak.addEventListener('change', function() {
-    setPeakSet(togglePeak.checked);
+    selectPq.disabled = togglePeak.checked;
+    updateVideoSources();
+  });
+  selectPq.addEventListener('change', function() {
+    if (togglePeak.checked) {
+      togglePeak.checked = false;
+      selectPq.disabled = false;
+    }
+    updateVideoSources();
   });
 
   function coverRect(imgW, imgH, targetW, targetH) {
