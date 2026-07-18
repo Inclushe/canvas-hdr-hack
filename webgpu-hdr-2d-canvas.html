@@ -134,17 +134,15 @@
     const getBrightness = () => parseFloat(brightnessSlider.value);
 
     //////////////////////////////////////////////////////////////////////
-    // Capability check: WebGPU. The HDR media query no longer gates this -
-    // we attempt WebGPU with extended tone mapping regardless.
+    // Capability check: WebGPU + HDR display
     //////////////////////////////////////////////////////////////////////
     const hdrMediaQuery = window.matchMedia('(dynamic-range: high)');
     let device = null;
     if (!navigator.gpu) {
       log('⚠️ WebGPU is not available - falling back to a 2D canvas (SDR).');
+    } else if (!hdrMediaQuery.matches) {
+      log("⚠️ Display isn't HDR-compatible - falling back to a 2D canvas (SDR).");
     } else {
-      if (!hdrMediaQuery.matches) {
-        log("ℹ️ Display doesn't report HDR - attempting WebGPU anyway.");
-      }
       const adapter = await navigator.gpu.requestAdapter();
       device = (await adapter?.requestDevice()) ?? null;
       if (!device) {

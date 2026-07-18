@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2D canvas animation → WebGPU HDR canvas (module)</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      display: flex;
+      place-content: center center;
+      align-items: center;
+      flex-direction: column;
+      gap: 12px;
+      font-family: system-ui, sans-serif;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      max-width: 100%;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #out-canvas {
+      width: 600px;
+      height: 600px;
+      max-width: 100%;
+    }
+
+    #src-canvas {
+      width: 200px;
+      height: 200px;
+    }
+
+    .label {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    #mode-summary {
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="row">
+    <div>
+      <canvas id="out-canvas"></canvas>
+      <div class="label" id="out-label">WebGPU canvas (HDR)</div>
+    </div>
+    <div>
+      <canvas id="src-canvas" width="600" height="600"></canvas>
+      <div class="label">Source 2D canvas (SDR)</div>
+    </div>
+  </div>
+  <div id="brightness-control" hidden>
+    <label for="brightness">Brightness factor: <span id="brightness-value">2.5</span></label>
+    <input id="brightness" type="range" min="1" max="4" step="0.1" value="2.5"
+      style="width: 300px; vertical-align: middle;">
+  </div>
+  <div id="mode-summary">Initializing…</div>
+  <script type="module">
+    import { initHdrCanvas } from './hdr-canvas.js';
+
+    //////////////////////////////////////////////////////////////////////
+    // Source: plain 2D canvas with a basic animation (SDR, 0–1 values)
+    //////////////////////////////////////////////////////////////////////
+    const srcCanvas = document.getElementById('src-canvas');
+    const ctx2d = srcCanvas.getContext('2d');
+    const W = srcCanvas.width;
+    const H = srcCanvas.height;
+
+    const ball = { x: W / 2, y: H / 3, vx: 260, vy: 200, r: 46 };
+
+    function draw2d(dt, t) {
+      // Solid black background
+      ctx2d.fillStyle = 'black';
+      ctx2d.fillRect(0, 0, W, H);
+
+      // Bounce
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+      if (ball.x < ball.r || ball.x > W - ball.r) { ball.vx *= -1; ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x)); }
+      if (ball.y < ball.r || ball.y > H - ball.r) { ball.vy *= -1; ball.y = Math.max(ball.r, Math.min(H - ball.r, ball.y)); }
+
+      // Glowing ball - white core, colored halo
+      const halo = ctx2d.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, ball.r * 2.2);
+      halo.addColorStop(0, 'white');
+      halo.addColorStop(0.35, `hsl(${(t * 40) % 360} 100% 60%)`);
+      halo.addColorStop(1, 'transparent');
+      ctx2d.fillStyle = halo;
+      ctx2d.beginPath();
+      ctx2d.arc(ball.x, ball.y, ball.r * 2.2, 0, Math.PI * 2);
+      ctx2d.fill();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // Output canvas: HDR via the module, or its built-in SDR fallback
+    //////////////////////////////////////////////////////////////////////
+    const outCanvas = document.getElementById('out-canvas');
+    const devicePixelRatio = window.devicePixelRatio;
+    outCanvas.width = outCanvas.clientWidth * devicePixelRatio;
+    outCanvas.height = outCanvas.clientHeight * devicePixelRatio;
+
+    const hdr = await initHdrCanvas(srcCanvas, outCanvas);
+
+    const modeSummary = document.getElementById('mode-summary');
+    if (hdr.mode === 'hdr') {
+      modeSummary.textContent = '✅ HDR mode (WebGPU)';
+      document.getElementById('brightness-control').hidden = false;
+
+      // Brightness slider (handled here in the HTML)
+      const brightnessSlider = document.getElementById('brightness');
+      const brightnessValue = document.getElementById('brightness-value');
+      const updateBrightness = () => {
+        const brightness = parseFloat(brightnessSlider.value);
+        brightnessValue.textContent = brightness.toFixed(1);
+        hdr.setBrightness(brightness);
+      };
+      brightnessSlider.addEventListener('input', updateBrightness);
+      updateBrightness();
+    } else {
+      document.getElementById('out-label').textContent = 'Fallback 2D canvas (SDR)';
+      modeSummary.textContent = '❌ SDR mode (2D canvas fallback)';
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // Frame loop
+    //////////////////////////////////////////////////////////////////////
+    let lastT = 0;
+    function frame(timeMs) {
+      const t = timeMs / 1000;
+      const dt = Math.min(t - lastT, 0.05);
+      lastT = t;
+
+      draw2d(dt, t);
+      hdr.render();
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+
+</html>
