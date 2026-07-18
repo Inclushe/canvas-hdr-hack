@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2D canvas animation → WebGPU HDR canvas</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      display: flex;
+      place-content: center center;
+      align-items: center;
+      flex-direction: column;
+      gap: 12px;
+      font-family: system-ui, sans-serif;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      max-width: 100%;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #out-canvas {
+      width: 600px;
+      height: 600px;
+      max-width: 100%;
+    }
+
+    #src-canvas {
+      width: 200px;
+      height: 200px;
+    }
+
+    .label {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    #status {
+      font-size: 14px;
+      white-space: pre-line;
+      text-align: center;
+      overflow-wrap: break-word;
+    }
+
+    details {
+      max-width: 320px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="row">
+    <div>
+      <canvas id="out-canvas"></canvas>
+      <div class="label" id="out-label">WebGPU canvas (HDR)</div>
+    </div>
+    <div>
+      <canvas id="src-canvas" width="600" height="600"></canvas>
+      <div class="label">Source 2D canvas (SDR)</div>
+    </div>
+  </div>
+  <div id="brightness-control" hidden>
+    <label for="brightness">Brightness factor: <span id="brightness-value">2.5</span></label>
+    <input id="brightness" type="range" min="1" max="4" step="0.1" value="2.5"
+      style="width: 300px; vertical-align: middle;">
+  </div>
+  <details>
+    <summary id="mode-summary">Initializing…</summary>
+    <div id="status"></div>
+  </details>
+  <script type="module">
+    const status = document.getElementById('status');
+    const modeSummary = document.getElementById('mode-summary');
+    const log = (msg) => (status.textContent += msg + '\n');
+
+    //////////////////////////////////////////////////////////////////////
+    // Source: plain 2D canvas with a basic animation (SDR, 0–1 values)
+    //////////////////////////////////////////////////////////////////////
+    const srcCanvas = document.getElementById('src-canvas');
+    const ctx2d = srcCanvas.getContext('2d');
+    const W = srcCanvas.width;
+    const H = srcCanvas.height;
+
+    const ball = { x: W / 2, y: H / 3, vx: 260, vy: 200, r: 46 };
+
+    function draw2d(dt, t) {
+      // Solid black background
+      ctx2d.fillStyle = 'black';
+      ctx2d.fillRect(0, 0, W, H);
+
+      // Bounce
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+      if (ball.x < ball.r || ball.x > W - ball.r) { ball.vx *= -1; ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x)); }
+      if (ball.y < ball.r || ball.y > H - ball.r) { ball.vy *= -1; ball.y = Math.max(ball.r, Math.min(H - ball.r, ball.y)); }
+
+      // Glowing ball - white core, colored halo
+      const halo = ctx2d.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, ball.r * 2.2);
+      halo.addColorStop(0, 'white');
+      halo.addColorStop(0.35, `hsl(${(t * 40) % 360} 100% 60%)`);
+      halo.addColorStop(1, 'transparent');
+      ctx2d.fillStyle = halo;
+      ctx2d.beginPath();
+      ctx2d.arc(ball.x, ball.y, ball.r * 2.2, 0, Math.PI * 2);
+      ctx2d.fill();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // Output canvas + brightness slider (shared by both paths)
+    //////////////////////////////////////////////////////////////////////
+    const outCanvas = document.getElementById('out-canvas');
+    const outLabel = document.getElementById('out-label');
+    const devicePixelRatio = window.devicePixelRatio;
+    outCanvas.width = outCanvas.clientWidth * devicePixelRatio;
+    outCanvas.height = outCanvas.clientHeight * devicePixelRatio;
+
+    const brightnessSlider = document.getElementById('brightness');
+    const brightnessValue = document.getElementById('brightness-value');
+    const getBrightness = () => parseFloat(brightnessSlider.value);
+
+    //////////////////////////////////////////////////////////////////////
+    // Capability check: WebGPU. The HDR media query no longer gates this -
+    // we attempt WebGPU with extended tone mapping regardless.
+    //////////////////////////////////////////////////////////////////////
+    const hdrMediaQuery = window.matchMedia('(dynamic-range: high)');
+    let device = null;
+    if (!navigator.gpu) {
+      log('⚠️ WebGPU is not available - falling back to a 2D canvas (SDR).');
+    } else {
+      if (!hdrMediaQuery.matches) {
+        log("ℹ️ Display doesn't report HDR - attempting WebGPU anyway.");
+      }
+      const adapter = await navigator.gpu.requestAdapter();
+      device = (await adapter?.requestDevice()) ?? null;
+      if (!device) {
+        log('⚠️ Failed to get a WebGPU device - falling back to a 2D canvas (SDR).');
+      }
+    }
+
+    // Probe rgba16float + extended tone mapping (Firefox supports WebGPU
+    // but not rgba16float canvases). Probing uses a throwaway canvas so
+    // out-canvas can still get a '2d' context if we end up falling back.
+    let presentationFormat = null;
+    if (device) {
+      const probeContext = document.createElement('canvas').getContext('webgpu');
+      if (probeContext) {
+        try {
+          probeContext.configure({ device, format: 'rgba16float', toneMapping: { mode: 'extended' } });
+          presentationFormat = 'rgba16float';
+        } catch (e) {
+          log(`⚠️ Canvas format 'rgba16float' not supported: ${e.message}`);
+        }
+        probeContext.unconfigure();
+      }
+      if (!presentationFormat) {
+        log('⚠️ No usable WebGPU canvas format - falling back to a 2D canvas (SDR).');
+        device = null;
+      }
+    }
+
+    let renderOut; // (t) => void, set by whichever path initializes
+
+    if (device) {
+      ////////////////////////////////////////////////////////////////////
+      // WebGPU path: rgba16float + extended tone mapping (HDR)
+      ////////////////////////////////////////////////////////////////////
+      const context = outCanvas.getContext('webgpu');
+      context.configure({
+        device,
+        format: presentationFormat,
+        toneMapping: { mode: 'extended' },
+      });
+      log(`ℹ️ WebGPU canvas format: ${presentationFormat}`);
+      modeSummary.textContent = '✅ HDR mode (WebGPU)';
+      document.getElementById('brightness-control').hidden = false;
+
+      if ('getConfiguration' in GPUCanvasContext.prototype) {
+        const mode = context.getConfiguration()?.toneMapping?.mode;
+        if (mode !== 'extended') {
+          log("⚠️ Browser doesn't support HDR canvas, fell back to '" + mode + "').");
+        } else {
+          log('✅ HDR canvas enabled.');
+        }
+      } else {
+        log('ℹ️ getConfiguration() unavailable.');
+      }
+
+      // Bridge: copy the 2D canvas into a texture each frame, then render
+      // it fullscreen multiplied by the brightness factor. An 8-bit 2D
+      // canvas only holds 0–1 values, so the multiply is what pushes
+      // highlights into HDR range.
+      const srcTexture = device.createTexture({
+        size: [W, H],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      const shaderModule = device.createShaderModule({
+        code: /* wgsl */ `
+            @group(0) @binding(0) var samp: sampler;
+            @group(0) @binding(1) var tex: texture_2d<f32>;
+            @group(0) @binding(2) var<uniform> brightness: f32;
+
+            struct VSOut {
+              @builtin(position) pos: vec4f,
+              @location(0) uv: vec2f,
+            };
+
+            @vertex
+            fn vs(@builtin(vertex_index) i: u32) -> VSOut {
+              // Fullscreen triangle
+              let pos = array(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+              var out: VSOut;
+              out.pos = vec4f(pos[i], 0, 1);
+              out.uv = pos[i] * vec2f(0.5, -0.5) + 0.5;
+              return out;
+            }
+
+            @fragment
+            fn fs(in: VSOut) -> @location(0) vec4f {
+              let c = textureSample(tex, samp, in.uv);
+              return vec4f(c.rgb * brightness, 1.0);
+            }
+          `,
+      });
+
+      const pipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module: shaderModule, entryPoint: 'vs' },
+        fragment: {
+          module: shaderModule,
+          entryPoint: 'fs',
+          targets: [{ format: presentationFormat }],
+        },
+        primitive: { topology: 'triangle-list' },
+      });
+
+      const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+      const brightnessBuffer = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+
+      const bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: sampler },
+          { binding: 1, resource: srcTexture.createView() },
+          { binding: 2, resource: { buffer: brightnessBuffer } },
+        ],
+      });
+
+      const updateBrightness = () => {
+        brightnessValue.textContent = getBrightness().toFixed(1);
+        device.queue.writeBuffer(brightnessBuffer, 0, new Float32Array([getBrightness()]));
+      };
+      brightnessSlider.addEventListener('input', updateBrightness);
+      updateBrightness();
+
+      renderOut = () => {
+        device.queue.copyExternalImageToTexture(
+          { source: srcCanvas },
+          { texture: srcTexture },
+          [W, H]
+        );
+
+        const commandEncoder = device.createCommandEncoder();
+        const passEncoder = commandEncoder.beginRenderPass({
+          colorAttachments: [
+            {
+              view: context.getCurrentTexture().createView(),
+              clearValue: [0, 0, 0, 1],
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
+          ],
+        });
+        passEncoder.setPipeline(pipeline);
+        passEncoder.setBindGroup(0, bindGroup);
+        passEncoder.draw(3);
+        passEncoder.end();
+        device.queue.submit([commandEncoder.finish()]);
+      };
+    } else {
+      ////////////////////////////////////////////////////////////////////
+      // Fallback path: plain 2D canvas, drawImage from the source canvas.
+      // No brightening - the slider is disabled.
+      ////////////////////////////////////////////////////////////////////
+      outLabel.textContent = 'Fallback 2D canvas (SDR)';
+      modeSummary.textContent = '❌ SDR mode (2D canvas fallback)';
+      const outCtx = outCanvas.getContext('2d');
+
+      renderOut = () => {
+        outCtx.drawImage(srcCanvas, 0, 0, outCanvas.width, outCanvas.height);
+      };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // Frame loop (shared)
+    //////////////////////////////////////////////////////////////////////
+    let lastT = 0;
+    function frame(timeMs) {
+      const t = timeMs / 1000;
+      const dt = Math.min(t - lastT, 0.05);
+      lastT = t;
+
+      draw2d(dt, t);
+      renderOut(t);
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+
+</html>

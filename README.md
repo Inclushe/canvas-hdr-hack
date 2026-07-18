@@ -1,5 +1,7 @@
 # Canvas Fake HDR
 
+**No #enable-experimental-web-platform-features flag needed.**
+
 Builds off of https://kidi.ng/wanna-see-a-whiter-white/
 Interpolate HDR solid color videos in canvas
 
